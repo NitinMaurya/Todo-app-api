@@ -7,13 +7,13 @@ var port = process.env.PORT || 8000;
 var todos = [
     {
     id : 1,
-    description : 'Meeting with my friend',
+    description : 'Meeting with friend',
     completed : false
 },
     {
     id : 2,
     description : 'Go to Market',
-    completed : false
+    completed : true
 },
     {
         id : 3,
