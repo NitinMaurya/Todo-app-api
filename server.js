@@ -44,6 +44,7 @@ app.get('/todos/:id',function (req,res){
    }
    else {
        res.status(404).send();
+       console.log('Page Not Found!');
    }
 });
 
