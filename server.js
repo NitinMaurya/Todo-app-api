@@ -27,8 +27,8 @@ app.get('/todos/:id',function (req,res){
        res.json(matchedtodo);
    }
    else {
-       res.status(404).send();
-       console.log('Page Not Found!');
+       res.status(404).json({"error" : "Page Not Found!"});
+
    }
 });
 
@@ -47,13 +47,39 @@ app.post('/todos',function (req,res){
 app.delete('/todos/:id',function (req,res){
     var todoId = parseInt(req.params.id,10);
     var delmatchedtodo = _.findWhere(todos,{ id : todoId});
-    if(!matchedtodo){
+    if(!delmatchedtodo){
         res.status(404).json({"error": "Todo Not Found With That Id !"});
     }
     else {
         todos = _.without(todos, delmatchedtodo);
         res.json(matchedtodo);
     }
+});
+
+app.put('/todos/:id',function (req,res){
+    var body = _.pick(req.body,'description','completed');
+    var validAttributes = {};
+    var todoId = parseInt(req.params.id,10);
+    var putmatchedtodo = _.findWhere(todos,{ id : todoId});
+    if(!putmatchedtodo){
+        return res.send(404).json({"error": "Page Not Found!"});
+    }
+    if (body.hasOwnProperty('completed') && _.isBoolean(body.completed)){
+        validAttributes.completed = body.completed;
+    }else if(body.hasOwnProperty('completed')){
+        return res.status(400).json({"error": "Bad Request!!"});
+    }
+
+    if (body.hasOwnProperty('description') && _.isString(body.description) && body.description.trim().length >0){
+        validAttributes.description = body.description;
+    }
+    else if (body.hasOwnProperty('description')){
+        return res.status(400).json({"error": "Bad Request!!"});
+    }
+
+    _.extend(putmatchedtodo,validAttributes);
+    res.json(putmatchedtodo);
+
 });
 
 app.listen(port,function (){
