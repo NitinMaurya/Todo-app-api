@@ -3,6 +3,7 @@
  */
 var express =  require ('express');
 var bodyParser = require ('body-parser');
+var _=require('underscore');
 var app = express();
 var port = process.env.PORT || 8000;
 var todos = [];
@@ -21,12 +22,7 @@ app.get ('/todos', function (req,res){
 var matchedtodo ;
 app.get('/todos/:id',function (req,res){
    var todoId = parseInt(req.params.id,10);
-
-   todos.forEach(function (calltodoId){
-      if(calltodoId.id === todoId){
-          matchedtodo = calltodoId;
-      }
-   });
+   matchedtodo = _.findWhere(todos,{ id : todoId});
    if(matchedtodo) {
        res.json(matchedtodo);
    }
@@ -37,7 +33,12 @@ app.get('/todos/:id',function (req,res){
 });
 
 app.post('/todos',function (req,res){
-    var body = req.body;
+    var body = _.pick(req.body,'description','completed');
+    if(!_.isBoolean(body.completed) || !_.isString(body.description) || body.description.trim().length === 0){
+        res.status(404).send();
+        return;
+    }
+    body.description = body.description.trim();
     body.id = (++todo_id);
     todos.push(body);
     res.json(body);
