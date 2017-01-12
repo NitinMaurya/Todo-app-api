@@ -18,6 +18,26 @@ app.get('/',function (req,res){
 
 app.get ('/todos', function (req,res){
     var query = req.query;
+    var where = {};
+
+    if(query.hasOwnProperty('completed') && query.completed === 'true' ){
+        where.completed=true;
+    }
+    else if(query.hasOwnProperty('completed') && query.completed === 'false' ){
+        where.completed = false;
+    }
+
+    if(query.hasOwnProperty('q') && query.q.length > 0 ){
+        where.description = {
+            $like : '%'+ query.q + '%'
+        }
+    }
+    db.todo.findAll({where : where}).then(function(todos){
+        res.json(todos);
+    },function (e){
+        res.status(500).send();
+    });
+/*
     var filteredTodos = todos;
 
     if( query.hasOwnProperty('completed') && query.completed === 'true'){
@@ -31,21 +51,34 @@ app.get ('/todos', function (req,res){
             return todo.description.toLowerCase().indexOf(query.q.toLowerCase() ) > -1;
         });
     }
-   res.json(filteredTodos);
+   res.json(filteredTodos);*/
 });
+
+
 
 var matchedtodo ;
 app.get('/todos/:id',function (req,res){
    var todoId = parseInt(req.params.id,10);
-   matchedtodo = _.findWhere(todos,{ id : todoId});
+/*   matchedtodo = _.findWhere(todos,{ id : todoId});
    if(matchedtodo) {
        res.json(matchedtodo);
    }
    else {
        res.status(404).json({"error" : "Page Not Found!"});
 
-   }
+   }*/
+    db.todo.findById(todoId).then(function (todo){
+       if(todo){
+           res.json(todo.toJSON());
+       }
+       else {
+           res.status(404).json('Page Not Found !!');
+       }
+    },function (e){
+        res.status(500).send();
+    });
 });
+
 
 app.post('/todos',function (req,res){
     var body = _.pick(req.body,'description','completed');
