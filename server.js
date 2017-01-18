@@ -2,9 +2,13 @@
  * Created by nitin on 6/1/17.
  */
 var express =  require ('express');
+var bcrypt = require('bcrypt');
 var bodyParser = require ('body-parser');
 var _=require('underscore');
 var db = require ('./db.js');
+var middleware = require('./middle1.js')(db);
+
+
 var app = express();
 var port = process.env.PORT || 8000;
 var todos = [];
@@ -12,13 +16,17 @@ var todo_id = 0;
 
 app.use(bodyParser.json());
 
-app.get('/',function (req,res){
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//GET
+app.get('/',middleware.requireAuthentication,function (req,res){
     res.send('Todo Api Root.');
 });
 
-app.get ('/todos', function (req,res){
+app.get ('/todos',middleware.requireAuthentication, function (req,res){
     var query = req.query;
-    var where = {};
+    var where = {
+        userId : req.user.get('id')
+    };
 
     if(query.hasOwnProperty('completed') && query.completed === 'true' ){
         where.completed=true;
@@ -54,10 +62,8 @@ app.get ('/todos', function (req,res){
    res.json(filteredTodos);*/
 });
 
-
-
 //var matchedtodo ;
-app.get('/todos/:id',function (req,res){
+app.get('/todos/:id',middleware.requireAuthentication,function (req,res){
    var todoId = parseInt(req.params.id,10);
 /*   matchedtodo = _.findWhere(todos,{ id : todoId});
    if(matchedtodo) {
@@ -67,7 +73,13 @@ app.get('/todos/:id',function (req,res){
        res.status(404).json({"error" : "Page Not Found!"});
 
    }*/
-    db.todo.findById(todoId).then(function (todo){
+    db.todo.findOne({
+        where: {
+            id :todoId,
+            userId: req.user.get('id')
+        }
+    }
+    ).then(function (todo){
        if(todo){
            res.json(todo.toJSON());
        }
@@ -78,9 +90,10 @@ app.get('/todos/:id',function (req,res){
         res.status(500).send();
     });
 });
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-
-app.post('/todos',function (req,res){
+//POST
+app.post('/todos',middleware.requireAuthentication,function (req,res){
     var body = _.pick(req.body,'description','completed');
     /*if(!_.isBoolean(body.completed) || !_.isString(body.description) || body.description.trim().length === 0){
         res.status(404).send();
@@ -90,16 +103,85 @@ app.post('/todos',function (req,res){
     body.id = (++todo_id);
     todos.push(body);
     res.json(body);*/
+
     db.todo.create(body).then(function (todo){
-        res.json(todo.toJSON());
+        req.user.addTodo(todo).then(function (){
+            return todo.reload();
+        }).then (function (todo){
+            res.json(todo.toJSON());
+        });
     },function (e){
        res.status(400).json(e);
     });
 });
+app.post('/users',function (req,res) {
+    var body = _.pick(req.body, 'email', 'password');
+    db.user.create(body).then(function (user){
+        res.json(user.toPublicJSON());
+    },function (e){
+        res.status(400).json(e);
+    });
+});
 
-app.delete('/todos/:id',function (req,res){
+app.post('/users/login',function(req,res){
+    var body = _.pick(req.body , 'email' , 'password');
+    var userInstance ;
+    db.user.authenticate(body).then(function (user){
+        var token = user.generateToken('authentication');
+        return db.token.create({
+            token : token
+        });
+       /* if(token){
+            res.header('Auth',token).json(user.toPublicJSON());
+        }
+        else {
+            res.status(401).send();
+        }*/
+
+    }).then (function (tokenInstance){
+        res.header('Auth',tokenInstance.get('token')).json(userInstance.toPublicJSON());
+
+    }).catch(function (e){
+        console.log(e);
+        res.status(401).send();
+    });
+    /* if(typeof req.body.email !== 'string' || typeof req.body.password !== 'string'){
+       return res.status(400).json({error :"Credentials Not valid!!"});
+    }
+    db.user.findOne({
+        where : {
+            email : body.email
+        }
+    }).then(function (user){
+    if(!user || !bcrypt.compareSync(body.password , user.get('hashed_Password'))){
+        return res.status(401).send();
+    }
+    res.json(user.toPublicJSON());
+    },function(e){
+        res.status(500).send();
+    })
+*/
+});
+
+
+app.delete('/users/login',middleware.requireAuthentication,function (req,res){
+    req.token.destroy().then(function (){
+        res.status(204).send();
+    } ).catch(function (){
+        res.status(500).send();
+    } );
+});
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//DELETE
+app.delete('/todos/:id',middleware.requireAuthentication,function (req,res){
     var todoId = parseInt(req.params.id,10);
-   db.todo.findById(todoId).then(function (todo){
+   db.todo.findOne({
+       where : {
+           id: todoId,
+           userId : req.user.get('id')
+       }
+   }).then(function (todo){
        if(todo){
            todo.destroy(todoId);
            res.status(204).send();
@@ -120,7 +202,10 @@ app.delete('/todos/:id',function (req,res){
     }*/
 });
 
-app.put('/todos/:id',function (req,res){
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//PUT
+app.put('/todos/:id',middleware.requireAuthentication,function (req,res){
     var body = _.pick(req.body,'description','completed');
     var Attributes = {};
     var todoId = parseInt(req.params.id,10);
@@ -142,7 +227,12 @@ app.put('/todos/:id',function (req,res){
     }
    _.extend(putmatchedtodo,validAttributes);
     res.json(putmatchedtodo);*/
-    db.todo.findById(todoId).then(function (todo){
+    db.todo.findOne({
+        where : {
+            id:todoId,
+            userId  : req.user.get('id')
+        }
+    }).then(function (todo){
         if(todo){
             todo.update(Attributes).then(function (todo) {
                 res.json(todo.toJSON());
@@ -159,7 +249,9 @@ app.put('/todos/:id',function (req,res){
 
 });
 
-db.sequelize.sync().then(function (){
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+db.sequelize.sync(/*{force : true}*/).then(function (){
     app.listen(port,function (){
         console.log('Express Server is running at port ' + port + '......');
     });
